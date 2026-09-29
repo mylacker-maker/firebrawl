@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fire Brawl</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lilita+One&display=swap');
+
+@font-face {
+    font-family: 'Pusia';
+    src: url('textures/Pusia.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Lilita';
+    src: url('textures/Lilita.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+    font-family: 'Pusia', sans-serif;
+    background: #000;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+/* Экран загрузки */
+#loading-screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #000; z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.5s ease;
+}
+.loader {
+    width: 40px; height: 40px; border: 4px solid #333;
+    border-top: 4px solid #FFD700; border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+.game-container {
+    width: 100%; max-width: 1200px; height: 100vh; max-height: 700px;
+    position: relative; overflow: hidden;
+    background: url('textures/bg.webp') center center / cover no-repeat;
+}
+
+#particles-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 1; pointer-events: none;
+}
+
+.trophy-count, .resource-badge span, .player-level, .stat-badge span, .brawler-stat-val {
+    font-family: 'Lilita', sans-serif;
+}
+
+.player-name, .side-btn-text, .play-btn, .map-mode, .map-team, .menu-btn, .screen-title, .brawler-name, .rarity-text {
+    font-family: 'Pusia', sans-serif;
+}
+
+/* Верхняя панель */
+.top-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 10px 12px; z-index: 10;
+}
+.top-left { display: flex; gap: 8px; align-items: flex-start; }
+
+.player-badge {
+    background: linear-gradient(180deg, #4a3a6a 0%, #2a1a4a 100%);
+    border: 2px solid #6a5a8a; border-radius: 12px;
+    padding: 6px 10px; display: flex; flex-direction: column; align-items: center;
+    min-width: 60px; cursor: pointer;
+}
+.player-level { width: 22px; height: 22px; margin-bottom: 4px; }
+.player-level img { width: 100%; height: 100%; object-fit: contain; }
+.player-name { font-size: 11px; color: #fff; text-shadow: 1px 1px 2px #000; }
+
+.trophy-bar {
+    background: linear-gradient(180deg, #3a2a5a 0%, #1a0a3a 100%);
+    border: 2px solid #5a4a7a; border-radius: 12px;
+    padding: 6px 12px; display: flex; align-items: center; gap: 8px;
+}
+.trophy-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.trophy-icon img { width: 100%; height: 100%; object-fit: contain; }
+.trophy-count { font-size: 20px; font-weight: bold; color: #FFD700; text-shadow: 2px 2px 4px #000; }
+
+.top-right { display: flex; gap: 6px; align-items: flex-start; }
+.resource-badge {
+    background: linear-gradient(180deg, #2a1a4a 0%, #1a0a3a 100%);
+    border: 2px solid #4a3a6a; border-radius: 20px;
+    padding: 4px 10px 4px 4px; display: flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: bold; text-shadow: 1px 1px 2px #000;
+}
+.resource-icon { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+.resource-icon img { width: 100%; height: 100%; object-fit: contain; }
+.menu-btn {
+    width: 46px; height: 40px; background: linear-gradient(180deg, #3a3a3a 0%, #1a1a1a 100%);
+    border: 2px solid #5a5a5a; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; cursor: pointer;
+}
+
+/* Трофеи бравлера */
+.brawler-trophies {
+    position: absolute; top: 28%; left: 50%; transform: translateX(-50%); z-index: 10;
+}
+.stat-badge {
+    background: linear-gradient(180deg, #3a2a5a 0%, #1a0a3a 100%);
+    border: 2px solid #5a4a7a; border-radius: 12px;
+    padding: 6px 12px; display: flex; align-items: center; gap: 6px;
+    font-size: 16px; font-weight: bold;
+}
+.stat-icon { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+.stat-icon img { width: 100%; height: 100%; object-fit: contain; }
+
+/* Боковые панели */
+.left-panel, .right-panel {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 10px; z-index: 10;
+}
+.left-panel { left: 10px; }
+.right-panel { right: 10px; }
+
+.side-btn {
+    background: linear-gradient(180deg, #2a2a4a 0%, #1a1a3a 100%);
+    border: 2px solid #4a4a6a; border-radius: 12px;
+    padding: 8px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    cursor: pointer; min-width: 75px;
+}
+.side-btn-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+.side-btn-icon img { width: 100%; height: 100%; object-fit: contain; }
+.side-btn-icon.news-icon, .side-btn-icon.brawler-icon { width: 60px; height: 60px; }
+.side-btn-text { font-size: 10px; font-weight: bold; text-transform: uppercase; text-shadow: 1px 1px 2px #000; }
+
+/* Персонаж */
+.character-area {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; z-index: 5;
+    width: 300px; height: 400px;
+}
+.character {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-end; position: relative; width: 100%;
+}
+.character-img {
+    max-width: 198px; max-height: 288px; width: auto; height: auto;
+    object-fit: contain; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+    z-index: 2; position: relative; margin-bottom: -20px;
+}
+.character-shadow {
+    position: relative; width: 180px; height: 40px;
+    background: rgba(0, 0, 0, 0.2); border-radius: 50%;
+    transform: scaleY(0.3); z-index: 1; pointer-events: none; margin-top: -10px;
+}
+
+/* Нижняя панель */
+.bottom-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 12px 15px; gap: 15px; z-index: 10;
+}
+.map-card {
+    background: linear-gradient(180deg, #3a2a5a 0%, #1a0a3a 100%);
+    border: 2px solid #5a4a7a; border-radius: 12px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    flex: 1; max-width: 280px;
+}
+.map-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; }
+.map-icon img { width: 100%; height: 100%; object-fit: contain; }
+.map-info { flex: 1; }
+.map-mode { font-size: 14px; font-weight: bold; text-transform: uppercase; }
+.map-team { font-size: 11px; color: #F44336; }
+
+.play-btn {
+    background: linear-gradient(180deg, #FFD700 0%, #FFA000 100%);
+    border: 3px solid #FF8F00; border-radius: 16px;
+    padding: 14px 32px; font-size: 24px; font-weight: bold; color: #fff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5); cursor: pointer;
+    text-transform: uppercase; box-shadow: 0 6px 0 #E65100, 0 8px 20px rgba(0,0,0,0.3);
+    transition: transform 0.1s;
+}
+.play-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #E65100, 0 4px 10px rgba(0,0,0,0.3); }
+.play-btn:disabled {
+    background: linear-gradient(180deg, #888 0%, #666 100%);
+    border-color: #444; box-shadow: 0 6px 0 #333; color: #ccc;
+}
+
+/* Экраны */
+.game-screen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, #2a5fa8 0%, #1a3a6a 50%, #0f2040 100%);
+    z-index: 100; display: flex; flex-direction: column;
+}
+.game-screen.hidden { display: none; }
+
+.screen-header {
+    display: flex; align-items: center; gap: 15px;
+    padding: 15px 20px; background: rgba(0,0,0,0.3);
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+.back-btn {
+    background: linear-gradient(180deg, #3a3a3a 0%, #1a1a1a 100%);
+    border: 2px solid #5a5a5a; border-radius: 10px;
+    width: 46px; height: 40px; color: #fff; font-size: 20px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    padding-bottom: 6px;
+}
+.screen-title { font-size: 24px; font-weight: bold; color: #fff; text-shadow: 2px 2px 4px #000; }
+
+/* Список бойцов (горизонтальный) */
+.brawlers-list-container {
+    flex: 1; overflow-x: auto; overflow-y: hidden;
+    display: flex; align-items: center; padding: 20px; gap: 15px;
+    scroll-snap-type: x mandatory;
+}
+.brawler-card {
+    min-width: 140px; height: 200px;
+    border: 3px solid #000; border-radius: 12px;
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center;
+    scroll-snap-align: center; cursor: pointer;
+    transition: transform 0.1s;
+}
+.brawler-card:active { transform: scale(0.95); }
+.brawler-card.selected { border: 3px solid #fff; box-shadow: 0 0 15px rgba(255,255,255,0.5); }
+.brawler-card.locked { filter: grayscale(100%) brightness(0.3); }
+
+.brawler-card-img {
+    width: 100%; height: 75%; object-fit: cover; object-position: top;
+}
+.brawler-name {
+    position: absolute; bottom: 8px; left: 0; right: 0;
+    text-align: center; font-size: 14px; font-weight: bold;
+    color: #fff; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+/* Цвета редкостей для карточек */
+.rarity-starter { background: linear-gradient(180deg, #4FC3F7, #0288D1); }
+.rarity-rare { background: linear-gradient(180deg, #81C784, #388E3C); }
+.rarity-super-rare { background: linear-gradient(180deg, #42A5F5, #1565C0); }
+.rarity-epic { background: linear-gradient(180deg, #BA68C8, #7B1FA2); }
+.rarity-mythic { background: linear-gradient(180deg, #EF5350, #C62828); }
+.rarity-legendary { background: linear-gradient(180deg, #FFF176, #F9A825); }
+
+/* Меню бойца */
+.brawler-menu-content {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; position: relative; padding: 20px;
+}
+.brawler-menu-char {
+    max-width: 250px; max-height: 350px; width: auto; height: auto;
+    object-fit: contain; filter: drop-shadow(0 15px 25px rgba(0,0,0,0.4));
+    margin-bottom: -30px; z-index: 2;
+}
+.brawler-menu-shadow {
+    width: 200px; height: 40px; background: rgba(0,0,0,0.25);
+    border-radius: 50%; transform: scaleY(0.3); z-index: 1; margin-top: -20px;
+}
+.rarity-text {
+    font-size: 20px; font-weight: bold; text-transform: uppercase;
+    margin-top: 15px; -webkit-text-stroke: 1.5px #000;
+    text-shadow: 2px 2px 0 #000; z-index: 2;
+}
+.brawler-menu-actions {
+    position: absolute; bottom: 20px; left: 20px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.brawler-menu-currency {
+    position: absolute; top: 20px; right: 20px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.mini-resource {
+    background: rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 15px; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: bold;
+}
+.mini-resource img { width: 20px; height: 20px; }
+
+/* Профиль */
+.profile-content {
+    flex: 1; display: flex; padding: 20px; gap: 20px;
+}
+.profile-left {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.profile-right {
+    flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 20px;
+}
+.profile-stat-box {
+    background: rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 12px; padding: 15px; text-align: center;
+}
+.profile-stat-label { font-size: 14px; color: #aaa; margin-bottom: 5px; }
+.profile-stat-val { font-size: 28px; color: #FFD700; }
+.profile-stats-row { display: flex; gap: 15px; }
+.profile-stats-row .profile-stat-box { flex: 1; }
+.win-text { color: #4CAF50; }
+.loss-text { color: #F44336; }
+
+/* Модальное окно ника */
+#nickname-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+    z-index: 10000; display: flex; align-items: center; justify-content: center;
+}
+#nickname-modal.hidden { display: none; }
+.nickname-box {
+    background: linear-gradient(180deg, #3a2a5a, #1a0a3a);
+    border: 3px solid #6a5a8a; border-radius: 16px;
+    padding: 30px; text-align: center; width: 90%; max-width: 350px;
+}
+.nickname-box h2 { margin-bottom: 20px; color: #FFD700; }
+.nickname-input {
+    width: 100%; padding: 12px; border-radius: 8px; border: 2px solid #5a4a7a;
+    background: rgba(0,0,0,0.5); color: #fff; font-family: 'Pusia', sans-serif;
+    font-size: 18px; text-align: center; margin-bottom: 20px; outline: none;
+}
+.nickname-input:focus { border-color: #FFD700; }
+
+/* Адаптивность */
+@media (max-width: 600px) {
+    .game-container { max-height: 100vh; }
+    .top-bar { padding: 6px 8px; }
+    .player-badge { min-width: 50px; padding: 4px 8px; }
+    .player-level { width: 18px; height: 18px; }
+    .player-name { font-size: 9px; }
+    .trophy-bar { padding: 4px 8px; }
+    .trophy-icon { width: 26px; height: 26px; }
+    .trophy-count { font-size: 16px; }
+    .resource-badge { padding: 3px 8px 3px 3px; font-size: 11px; }
+    .resource-icon { width: 22px; height: 22px; }
+    .menu-btn { width: 38px; height: 34px; font-size: 18px; }
+    
+    .brawler-trophies { top: 22%; }
+    .stat-badge { padding: 4px 8px; font-size: 13px; }
+    .stat-icon { width: 24px; height: 24px; }
+    
+    .side-btn { min-width: 60px; padding: 6px 8px; }
+    .side-btn-icon { width: 30px; height: 30px; }
+    .side-btn-icon.news-icon, .side-btn-icon.brawler-icon { width: 50px; height: 50px; }
+    .side-btn-text { font-size: 9px; }
+    
+    .character-area { width: 220px; height: 300px; }
+    .character-img { max-width: 144px; max-height: 216px; margin-bottom: -15px; }
+    .character-shadow { width: 130px; height: 30px; }
+    
+    .bottom-bar { padding: 8px 10px; gap: 8px; }
+    .map-card { padding: 8px 10px; max-width: 200px; }
+    .map-icon { width: 30px; height: 30px; }
+    .map-mode { font-size: 12px; }
+    .map-team { font-size: 10px; }
+    .play-btn { padding: 10px 20px; font-size: 18px; }
+
+    .brawler-card { min-width: 120px; height: 170px; }
+    .profile-content { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<audio id="click-sound" src="textures/click.mp3"></audio>
+
+<div id="loading-screen">
+    <div class="loader"></div>
+</div>
+
+<div id="nickname-modal" class="hidden">
+    <div class="nickname-box">
+        <h2>Добро пожаловать!</h2>
+        <p style="margin-bottom: 15px; color: #ccc;">Введите ваш никнейм:</p>
+        <input type="text" id="nickname-input" class="nickname-input" placeholder="Никнейм" maxlength="12">
+        <button class="play-btn" id="nickname-submit-btn" style="width: 100%; font-size: 18px; padding: 12px;" onclick="saveNickname()">Начать игру</button>
+    </div>
+</div>
+
+<div class="game-container">
+    <canvas id="particles-canvas"></canvas>
+
+    <!-- Главное меню -->
+    <div id="main-menu" style="width:100%; height:100%; position:relative;">
+        <div class="top-bar">
+            <div class="top-left">
+                <div class="player-badge" onclick="playClick(); openScreen('profile-screen')">
+                    <div class="player-level"><img src="textures/icon.png" alt="icon" onerror="this.style.display='none'"></div>
+                    <div class="player-name" id="ui-nickname">Ник</div>
+                </div>
+                <div class="trophy-bar">
+                    <div class="trophy-icon"><img src="textures/trophies.png" alt="trophies" onerror="this.style.display='none'"></div>
+                    <div class="trophy-count" id="ui-trophies">0</div>
+                </div>
+            </div>
+            <div class="top-right">
+                <div class="resource-badge">
+                    <div class="resource-icon"><img src="textures/money.png" alt="money" onerror="this.style.display='none'"></div>
+                    <span id="ui-coins">0</span>
+                </div>
+                <div class="resource-badge">
+                    <div class="resource-icon"><img src="textures/gems.png" alt="gems" onerror="this.style.display='none'"></div>
+                    <span id="ui-gems">0</span>
+                </div>
+                <div class="menu-btn" onclick="playClick()">☰</div>
+            </div>
+        </div>
+
+        <div class="brawler-trophies">
+            <div class="stat-badge">
+                <div class="stat-icon"><img src="textures/trophies.png" alt="trophies" onerror="this.style.display='none'"></div>
+                <span id="ui-brawler-trophies">0</span>
+            </div>
+        </div>
+
+        <div class="left-panel">
+            <div class="side-btn" onclick="playClick(); openScreen('shop-screen')">
+                <div class="side-btn-icon"><img src="textures/shop.png" alt="shop" onerror="this.style.display='none'"></div>
+                <div class="side-btn-text">МАГАЗИН</div>
+            </div>
+            <div class="side-btn" onclick="playClick(); openScreen('brawlers-screen')">
+                <div class="side-btn-icon brawler-icon"><img src="textures/brawler.png" alt="brawler" onerror="this.style.display='none'"></div>
+                <div class="side-btn-text">БОЙЦЫ</div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="side-btn" onclick="playClick(); openScreen('news-screen')">
+                <div class="side-btn-icon news-icon"><img src="textures/news.png" alt="news" onerror="this.style.display='none'"></div>
+                <div class="side-btn-text">НОВОСТИ</div>
+            </div>
+        </div>
+
+        <div class="character-area">
+            <div class="character">
+                <img src="textures/shelly.png" alt="Shelly" class="character-img" id="ui-character-img" onerror="this.style.display='none'">
+                <div class="character-shadow"></div>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <div class="map-card">
+                <div class="map-icon"><img src="textures/duels.png" alt="duels" onerror="this.style.display='none'"></div>
+                <div class="map-info">
+                    <div class="map-mode" id="ui-mode">ДУЭЛЬ</div>
+                    <div class="map-team">Быстрый полёт</div>
+                </div>
+            </div>
+            <button class="play-btn" onclick="playClick(); alert('Запуск игры...')">ИГРАТЬ</button>
+        </div>
+    </div>
+
+    <!-- Экран Магазина -->
+    <div id="shop-screen" class="game-screen hidden">
+        <div class="screen-header">
+            <button class="back-btn" onclick="playClick(); closeScreen()">◀</button>
+            <span class="screen-title">Магазин</span>
+        </div>
+        <div class="screen-content" style="color: rgba(255,255,255,0.5); font-size: 18px; display: flex; align-items: center; justify-content: center; flex: 1;">Здесь будет магазин</div>
+    </div>
+
+    <!-- Экран Бойцов -->
+    <div id="brawlers-screen" class="game-screen hidden">
+        <div class="screen-header">
+            <button class="back-btn" onclick="playClick(); closeScreen()">◀</button>
+            <span class="screen-title">Бойцы</span>
+        </div>
+        <div class="brawlers-list-container" id="brawlers-list">
+            <!-- Карточки генерируются JS -->
+        </div>
+    </div>
+
+    <!-- Меню Бойца -->
+    <div id="brawler-menu-screen" class="game-screen hidden">
+        <div class="screen-header">
+            <button class="back-btn" onclick="playClick(); closeScreen()">◀</button>
+            <span class="screen-title" id="brawler-menu-title">Боец</span>
+        </div>
+        <div class="brawler-menu-content">
+            <div class="brawler-menu-currency">
+                <div class="mini-resource">
+                    <img src="textures/money.png" onerror="this.style.display='none'">
+                    <span id="menu-coins">0</span>
+                </div>
+                <div class="mini-resource">
+                    <img src="textures/gems.png" onerror="this.style.display='none'">
+                    <span id="menu-gems">0</span>
+                </div>
+            </div>
+
+            <div class="stat-badge" id="brawler-menu-trophies" style="margin-bottom: 10px;">
+                <div class="stat-icon"><img src="textures/trophies.png" onerror="this.style.display='none'"></div>
+                <span id="menu-brawler-trophies">0</span>
+            </div>
+
+            <img src="textures/shelly.png" class="brawler-menu-char" id="menu-char-img" onerror="this.style.display='none'">
+            <div class="brawler-menu-shadow"></div>
+            
+            <div class="rarity-text" id="menu-rarity-text">НАЧАЛЬНЫЙ</div>
+
+            <div class="brawler-menu-actions">
+                <button class="play-btn" id="menu-select-btn" style="font-size: 18px; padding: 12px 24px;" onclick="selectCurrentBrawler()">ВЫБРАТЬ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Экран Новостей -->
+    <div id="news-screen" class="game-screen hidden">
+        <div class="screen-header">
+            <button class="back-btn" onclick="playClick(); closeScreen()"></button>
+            <span class="screen-title">Новости</span>
+        </div>
+        <div class="screen-content" style="color: rgba(255,255,255,0.5); font-size: 18px; display: flex; align-items: center; justify-content: center; flex: 1;">Здесь будут новости</div>
+    </div>
+
+    <!-- Экран Профиля -->
+    <div id="profile-screen" class="game-screen hidden">
+        <div class="screen-header">
+            <button class="back-btn" onclick="playClick(); closeScreen()"></button>
+            <span class="screen-title">Профиль</span>
+        </div>
+        <div class="profile-content">
+            <div class="profile-left">
+                <img src="textures/shelly.png" class="brawler-menu-char" id="profile-char-img" style="max-width: 200px; max-height: 300px;" onerror="this.style.display='none'">
+                <div class="brawler-menu-shadow" style="width: 150px;"></div>
+                <div style="margin-top: 10px; font-size: 18px; font-weight: bold;" id="profile-brawler-name">Шелли</div>
+            </div>
+            <div class="profile-right">
+                <div class="profile-stat-box">
+                    <div class="profile-stat-label">Общие трофеи</div>
+                    <div class="profile-stat-val">🏆 <span id="profile-total-trophies">0</span></div>
+                </div>
+                <div class="profile-stats-row">
+                    <div class="profile-stat-box">
+                        <div class="profile-stat-label">Победы</div>
+                        <div class="profile-stat-val win-text" id="profile-wins">0</div>
+                    </div>
+                    <div class="profile-stat-box">
+                        <div class="profile-stat-label">Поражения</div>
+                        <div class="profile-stat-val loss-text" id="profile-losses">0</div>
+                    </div>
+                </div>
+                <div class="profile-stat-box">
+                    <div class="profile-stat-label">Аккаунт создан</div>
+                    <div class="profile-stat-val" style="font-size: 18px; color: #fff;" id="profile-date">--.--.----</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// === КОНФИГУРАЦИЯ ===
+const DB_URL = "https://lackerteam-default-rtdb.firebaseio.com";
+const ROOT_PATH = "firebrawl";
+
+const urlParams = new URLSearchParams(window.location.search);
+let userId = urlParams.get('id');
+
+if (!userId) {
+    userId = 'user_' + Math.random().toString(36).substr(2, 9);
+    window.history.replaceState({}, document.title, `?id=${userId}`);
+}
+
+// === ДАННЫЕ БОЙЦОВ ===
+const brawlersData = [
+    { id: 'shelly', name: 'Шелли', rarity: 'starter', unlocked: true, image: 'shelly.png' },
+    { id: 'nita', name: 'Нита', rarity: 'rare', unlocked: false, image: 'nita.png' },
+    { id: 'colt', name: 'Кольт', rarity: 'rare', unlocked: false, image: 'colt.png' },
+    { id: 'bull', name: 'Булл', rarity: 'rare', unlocked: false, image: 'bull.png' },
+    { id: 'jessie', name: 'Джесси', rarity: 'super-rare', unlocked: false, image: 'jessie.png' },
+    { id: 'poco', name: 'Поко', rarity: 'super-rare', unlocked: false, image: 'poco.png' },
+    { id: 'elprimo', name: 'Эль Примо', rarity: 'rare', unlocked: false, image: 'elprimo.png' },
+    { id: 'pam', name: 'Пэм', rarity: 'epic', unlocked: false, image: 'pam.png' },
+    { id: 'mortis', name: 'Мортис', rarity: 'mythic', unlocked: false, image: 'mortis.png' },
+    { id: 'tara', name: 'Тара', rarity: 'mythic', unlocked: false, image: 'tara.png' },
+    { id: 'spike', name: 'Спайк', rarity: 'legendary', unlocked: false, image: 'spike.png' },
+    { id: 'crow', name: 'Ворон', rarity: 'legendary', unlocked: false, image: 'crow.png' }
+];
+
+let currentBrawlerMenuId = null;
+let userData = {};
+
+// === ЗВУК ===
+function playClick() {
+    try {
+        const audio = document.getElementById('click-sound');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+        }
+    } catch(e) {}
+}
+
+// === СИСТЕМА ЗАГРУЗКИ И БД ===
+async function initGame() {
+    const startTime = Date.now();
+    const defaultData = {
+        nickname: "Ник",
+        trophies: 0,
+        coins: 0,
+        gems: 0,
+        wins: 0,
+        losses: 0,
+        selected_brawler: "shelly",
+        selected_mode: "duel",
+        created_at: new Date().toLocaleDateString('ru-RU'),
+        unlocked_brawlers: ["shelly"],
+        version: 1
+    };
+
+    try {
+        const response = await fetch(`${DB_URL}/${ROOT_PATH}/users/${userId}.json`);
+        let data = await response.json();
+
+        if (!data) {
+            userData = defaultData;
+            await fetch(`${DB_URL}/${ROOT_PATH}/users/${userId}.json`, {
+                method: 'PUT', body: JSON.stringify(userData)
+            });
+        } else {
+            userData = data;
+            let needsUpdate = false;
+            for (const key in defaultData) {
+                if (userData[key] === undefined || userData[key] === null) {
+                    userData[key] = defaultData[key];
+                    needsUpdate = true;
+                }
+            }
+            if (needsUpdate) {
+                await fetch(`${DB_URL}/${ROOT_PATH}/users/${userId}.json`, {
+                    method: 'PATCH', body: JSON.stringify(userData)
+                });
+            }
+        }
+
+        updateUI();
+
+        // Проверка ника - если ник дефолтный, показываем модалку
+        if (userData.nickname === "Ник" || !userData.nickname) {
+            // Скрываем экран загрузки сразу, показываем модалку
+            document.getElementById('loading-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+            }, 500);
+            document.getElementById('nickname-modal').classList.remove('hidden');
+        } else {
+            finishLoading(startTime);
+        }
+
+    } catch (error) {
+        console.error("Ошибка БД:", error);
+        userData = defaultData;
+        updateUI();
+        // При ошибке всё равно показываем модалку ника
+        document.getElementById('loading-screen').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('loading-screen').style.display = 'none';
+        }, 500);
+        document.getElementById('nickname-modal').classList.remove('hidden');
+    }
+}
+
+function finishLoading(startTime) {
+    const elapsed = Date.now() - startTime;
+    const delay = Math.max(0, 1000 - elapsed);
+    setTimeout(() => {
+        document.getElementById('loading-screen').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('loading-screen').style.display = 'none';
+        }, 500);
+    }, delay);
+}
+
+async function saveNickname() {
+    const input = document.getElementById('nickname-input');
+    const btn = document.getElementById('nickname-submit-btn');
+    const name = input.value.trim();
+    
+    // Проверка на минимальную длину
+    if (name.length < 2) {
+        input.style.borderColor = '#F44336';
+        input.style.animation = 'shake 0.3s';
+        setTimeout(() => { 
+            input.style.animation = ''; 
+            input.style.borderColor = '#5a4a7a';
+        }, 300);
+        return;
+    }
+    
+    // Безопасное воспроизведение звука
+    try {
+        const audio = document.getElementById('click-sound');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+        }
+    } catch(e) {}
+
+    const originalText = btn.textContent;
+    btn.textContent = "Сохранение...";
+    btn.disabled = true;
+
+    try {
+        userData.nickname = name;
+        
+        // Отправка в Firebase
+        await fetch(`${DB_URL}/${ROOT_PATH}/users/${userId}.json`, {
+            method: 'PATCH', 
+            body: JSON.stringify({ nickname: name })
+        });
+        
+        // Скрываем модальное окно
+        document.getElementById('nickname-modal').classList.add('hidden');
+        
+        // Гарантированно убираем экран загрузки
+        const loadingScreen = document.getElementById('loading-screen');
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => { loadingScreen.style.display = 'none'; }, 500);
+        
+        // Обновляем интерфейс с новым ником
+        updateUI();
+        
+    } catch (error) {
+        console.error("Ошибка сохранения ника:", error);
+        btn.textContent = "Ошибка сети!";
+        btn.style.background = "#F44336";
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = "";
+            btn.disabled = false;
+        }, 2000);
+    }
+}
+
+function updateUI() {
+    document.getElementById('ui-nickname').textContent = userData.nickname;
+    
+    document.getElementById('ui-trophies').textContent = userData.trophies;
+    document.getElementById('ui-brawler-trophies').textContent = userData.trophies;
+    document.getElementById('ui-coins').textContent = userData.coins;
+    document.getElementById('ui-gems').textContent = userData.gems;
+    
+    document.getElementById('ui-mode').textContent = userData.selected_mode === 'duel' ? 'ДУЭЛЬ' : userData.selected_mode.toUpperCase();
+    
+    const charImg = document.getElementById('ui-character-img');
+    const brawler = brawlersData.find(b => b.id === userData.selected_brawler) || brawlersData[0];
+    charImg.src = `textures/${brawler.image}`;
+
+    // Обновление меню профиля
+    document.getElementById('profile-total-trophies').textContent = userData.trophies;
+    document.getElementById('profile-wins').textContent = userData.wins || 0;
+    document.getElementById('profile-losses').textContent = userData.losses || 0;
+    document.getElementById('profile-date').textContent = userData.created_at;
+    document.getElementById('profile-brawler-name').textContent = brawler.name;
+    document.getElementById('profile-char-img').src = `textures/${brawler.image}`;
+
+    renderBrawlersList();
+}
+
+// === БОЙЦЫ ===
+function renderBrawlersList() {
+    const container = document.getElementById('brawlers-list');
+    container.innerHTML = '';
+    
+    brawlersData.forEach(b => {
+        const isUnlocked = userData.unlocked_brawlers.includes(b.id) || b.rarity === 'starter';
+        const isSelected = userData.selected_brawler === b.id;
+        
+        const card = document.createElement('div');
+        card.className = `brawler-card rarity-${b.rarity} ${!isUnlocked ? 'locked' : ''} ${isSelected ? 'selected' : ''}`;
+        card.onclick = () => { playClick(); openBrawlerMenu(b.id); };
+        
+        card.innerHTML = `
+            <img src="textures/${b.image}" class="brawler-card-img" onerror="this.src='textures/shelly.png'">
+            <div class="brawler-name">${b.name}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function openBrawlerMenu(brawlerId) {
+    currentBrawlerMenuId = brawlerId;
+    const b = brawlersData.find(x => x.id === brawlerId);
+    const isUnlocked = userData.unlocked_brawlers.includes(b.id) || b.rarity === 'starter';
+    
+    document.getElementById('brawler-menu-title').textContent = b.name;
+    document.getElementById('menu-char-img').src = `textures/${b.image}`;
+    
+    const rarityNames = {
+        'starter': 'НАЧАЛЬНЫЙ', 'rare': 'РЕДКИЙ', 'super-rare': 'СВЕРХРЕДКИЙ',
+        'epic': 'ЭПИЧЕСКИЙ', 'mythic': 'МИФИЧЕСКИЙ', 'legendary': 'ЛЕГЕНДАРНЫЙ'
+    };
+    const rarityColors = {
+        'starter': '#4FC3F7', 'rare': '#81C784', 'super-rare': '#42A5F5',
+        'epic': '#BA68C8', 'mythic': '#EF5350', 'legendary': '#FFF176'
+    };
+    
+    const rarityText = document.getElementById('menu-rarity-text');
+    rarityText.textContent = rarityNames[b.rarity];
+    rarityText.style.color = rarityColors[b.rarity];
+    
+    document.getElementById('menu-coins').textContent = userData.coins;
+    document.getElementById('menu-gems').textContent = userData.gems;
+    
+    const trophiesEl = document.getElementById('brawler-menu-trophies');
+    const trophiesVal = document.getElementById('menu-brawler-trophies');
+    if (isUnlocked) {
+        trophiesEl.style.display = 'flex';
+        trophiesVal.textContent = userData.trophies;
+    } else {
+        trophiesEl.style.display = 'none';
+    }
+    
+    const selectBtn = document.getElementById('menu-select-btn');
+    if (isUnlocked) {
+        selectBtn.textContent = 'ВЫБРАТЬ';
+        selectBtn.disabled = false;
+        selectBtn.style.opacity = '1';
+    } else {
+        selectBtn.textContent = 'ЗАБЛОКИРОВАН(А)';
+        selectBtn.disabled = true;
+        selectBtn.style.opacity = '0.6';
+    }
+    
+    openScreen('brawler-menu-screen');
+}
+
+async function selectCurrentBrawler() {
+    if (!currentBrawlerMenuId) return;
+    playClick();
+    
+    userData.selected_brawler = currentBrawlerMenuId;
+    await fetch(`${DB_URL}/${ROOT_PATH}/users/${userId}.json`, {
+        method: 'PATCH', body: JSON.stringify({ selected_brawler: currentBrawlerMenuId })
+    });
+    
+    updateUI();
+    closeScreen();
+}
+
+// === УПРАВЛЕНИЕ ЭКРАНАМИ ===
+function openScreen(screenId) {
+    document.getElementById(screenId).classList.remove('hidden');
+    if (screenId === 'profile-screen') updateUI();
+}
+
+function closeScreen() {
+    document.querySelectorAll('.game-screen').forEach(screen => {
+        screen.classList.add('hidden');
+    });
+}
+
+// === ЧАСТИЦЫ ===
+const canvas = document.getElementById('particles-canvas');
+const ctx = canvas.getContext('2d');
+const container = document.querySelector('.game-container');
+let particles = [];
+
+function resizeCanvas() {
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+}
+
+function createParticle() {
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 3 + 1,
+        speedX: Math.random() * 0.8 + 0.3,
+        speedY: -(Math.random() * 0.8 + 0.3),
+        opacity: 0.1
+    };
+}
+
+function initParticles() {
+    particles = [];
+    for (let i = 0; i < 80; i++) particles.push(createParticle());
+}
+
+function updateParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+        p.x += p.speedX;
+        p.y += p.speedY;
+        if (p.x > canvas.width || p.y < 0) {
+            if (Math.random() > 0.5) { p.x = Math.random() * canvas.width; p.y = canvas.height + 10; } 
+            else { p.x = -10; p.y = Math.random() * canvas.height; }
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+        ctx.fill();
+    });
+    requestAnimationFrame(updateParticles);
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+initParticles();
+updateParticles();
+initGame();
+</script>
+
+</body>
+</html>
