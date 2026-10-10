@@ -5,25 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Cloud Brawl — Battle</title>
 <style>
+@font-face {
+    font-family: 'Lilita';
+    src: url('textures/Lilita.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
 * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: Arial, sans-serif; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
 canvas { display: block; width: 100%; height: 100%; }
-
-#hud {
-    position: fixed; top: 0; left: 0; right: 0;
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 20px; color: #fff; font-weight: bold;
-    z-index: 10; pointer-events: none;
-}
-.hp-bar {
-    width: 40%; height: 20px; background: #333; border-radius: 10px;
-    overflow: hidden; border: 2px solid #000;
-}
-.hp-fill {
-    height: 100%; background: #4caf50; transition: width 0.2s;
-}
-.hp-fill.enemy { background: #f44336; }
-.hp-text { font-size: 12px; margin-top: 4px; }
 
 #joystick {
     position: fixed; bottom: 30px; left: 30px;
@@ -42,7 +32,7 @@ canvas { display: block; width: 100%; height: 100%; }
     position: fixed; bottom: 30px; right: 30px;
     width: 100px; height: 100px; border-radius: 50%;
     background: #f44336; color: #fff; border: none;
-    font-size: 16px; font-weight: bold;
+    font-size: 32px; font-weight: bold;
     z-index: 10;
 }
 #shootBtn:active { transform: scale(0.95); background: #d32f2f; }
@@ -51,27 +41,17 @@ canvas { display: block; width: 100%; height: 100%; }
     position: fixed; inset: 0; background: rgba(0,0,0,0.85);
     display: none; align-items: center; justify-content: center;
     flex-direction: column; color: #fff; z-index: 100;
+    font-family: 'Lilita', Arial, sans-serif;
 }
 #result.on { display: flex; }
-#result h1 { font-size: 48px; margin-bottom: 20px; }
+#result h1 { font-size: 56px; margin-bottom: 20px; }
 #result h1.win { color: #4caf50; }
 #result h1.lose { color: #f44336; }
-#result p { font-size: 24px; }
+#result p { font-size: 28px; }
 </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
-
-<div id="hud">
-    <div>
-        <div class="hp-bar"><div class="hp-fill" id="myHp"></div></div>
-        <div class="hp-text" id="myHpText">100 / 100</div>
-    </div>
-    <div style="text-align:right">
-        <div class="hp-bar"><div class="hp-fill enemy" id="enemyHp"></div></div>
-        <div class="hp-text" id="enemyHpText">100 / 100</div>
-    </div>
-</div>
 
 <div id="joystick"><div id="stick"></div></div>
 <button id="shootBtn">🔥</button>
@@ -97,40 +77,63 @@ window.addEventListener('resize', resize);
 const params = new URLSearchParams(window.location.search);
 const brawler = parseInt(params.get('brawler')) || 1;
 
+// ===== ТЕКСТУРЫ =====
+const TEX = {};
+const TEX_LIST = {
+    bg: 'textures/bg.png',
+    shelly: 'textures/shelly.png',
+    shadow: 'textures/shadow.png',
+    health: 'textures/health.png',
+    health_enemy: 'textures/health_enemy.png',
+};
+let loaded = 0;
+const total = Object.keys(TEX_LIST).length;
+
+for (const [key, path] of Object.entries(TEX_LIST)) {
+    const img = new Image();
+    img.onload = () => { TEX[key] = img; loaded++; if (loaded === total) start(); };
+    img.onerror = () => { TEX[key] = null; loaded++; if (loaded === total) start(); };
+    img.src = path;
+}
+
+let started = false;
+function start() {
+    if (started) return;
+    started = true;
+    loop();
+}
+
 // ===== ИГРОК =====
 const player = {
-    x: W / 2 - 100,
+    x: W / 2 - 200,
     y: H / 2,
-    w: 40,
-    h: 40,
+    w: 80,
+    h: 80,
     hp: 100,
     maxHp: 100,
     speed: 4,
-    color: '#4DA6FF',
     lastShot: 0,
+    face: 1,
 };
 
 // ===== ВРАГ =====
 const enemy = {
-    x: W / 2 + 100,
+    x: W / 2 + 120,
     y: H / 2,
-    w: 40,
-    h: 40,
+    w: 80,
+    h: 80,
     hp: 100,
     maxHp: 100,
-    speed: 2,
-    color: '#FF4757',
+    speed: 4,
     lastShot: 0,
-    targetX: W / 2 + 100,
-    targetY: H / 2,
-    changeDirTimer: 0,
+    face: -1,
+    aiTimer: 0,
 };
 
 // ===== ПУЛИ =====
 const bullets = [];
 
 // ===== УПРАВЛЕНИЕ =====
-let joyActive = false;
 let joyId = null;
 let joyCenter = { x: 0, y: 0 };
 let joyVector = { x: 0, y: 0 };
@@ -142,7 +145,6 @@ joystick.addEventListener('touchstart', (e) => {
     e.preventDefault();
     const t = e.changedTouches[0];
     joyId = t.identifier;
-    joyActive = true;
     const rect = joystick.getBoundingClientRect();
     joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }, { passive: false });
@@ -165,7 +167,6 @@ joystick.addEventListener('touchmove', (e) => {
 function endJoy(e) {
     for (const t of e.changedTouches) {
         if (t.identifier !== joyId) continue;
-        joyActive = false;
         joyId = null;
         joyVector = { x: 0, y: 0 };
         stick.style.transform = 'translate(-50%, -50%)';
@@ -174,47 +175,55 @@ function endJoy(e) {
 joystick.addEventListener('touchend', endJoy);
 joystick.addEventListener('touchcancel', endJoy);
 
-// ===== СТРЕЛЬБА =====
-const SHOOT_COOLDOWN = 500;
+// ===== СТРЕЛЬБА ИГРОКА =====
+const PLAYER_COOLDOWN = 500;
 const SHOTGUN_COUNT = 5;
-const SHOTGUN_SPREAD = 0.4;
-const BULLET_SPEED = 10;
-const BULLET_LIFE = 40;
+const SHOTGUN_SPREAD = 0.5;
+const PLAYER_BULLET_SPEED = 10;
+const PLAYER_BULLET_LIFE = 40;
+const PLAYER_BULLET_DAMAGE = 8;
 
-function shoot() {
+function shootAt(target) {
     const now = Date.now();
-    if (now - player.lastShot < SHOOT_COOLDOWN) return;
+    if (now - player.lastShot < PLAYER_COOLDOWN) return;
     player.lastShot = now;
 
     const px = player.x + player.w / 2;
     const py = player.y + player.h / 2;
-    const ex = enemy.x + enemy.w / 2;
-    const ey = enemy.y + enemy.h / 2;
-    const baseAngle = Math.atan2(ey - py, ex - px);
+    const tx = target.x + target.w / 2;
+    const ty = target.y + target.h / 2;
+    const baseAngle = Math.atan2(ty - py, tx - px);
+
+    player.face = Math.cos(baseAngle) >= 0 ? 1 : -1;
 
     for (let i = 0; i < SHOTGUN_COUNT; i++) {
         const angle = baseAngle + (Math.random() - 0.5) * SHOTGUN_SPREAD;
         bullets.push({
             x: px, y: py,
-            vx: Math.cos(angle) * BULLET_SPEED,
-            vy: Math.sin(angle) * BULLET_SPEED,
-            life: BULLET_LIFE,
+            vx: Math.cos(angle) * PLAYER_BULLET_SPEED,
+            vy: Math.sin(angle) * PLAYER_BULLET_SPEED,
+            life: PLAYER_BULLET_LIFE,
             owner: 'player',
-            damage: 12,
+            damage: PLAYER_BULLET_DAMAGE,
         });
     }
 }
 
-document.getElementById('shootBtn').addEventListener('click', shoot);
+document.getElementById('shootBtn').addEventListener('click', () => shootAt(enemy));
 document.getElementById('shootBtn').addEventListener('touchstart', (e) => {
     e.preventDefault();
-    shoot();
+    shootAt(enemy);
 }, { passive: false });
 
 // ===== ВЫСТРЕЛ ВРАГА =====
+const ENEMY_COOLDOWN = 700;
+const ENEMY_BULLET_SPEED = 8;
+const ENEMY_BULLET_LIFE = 60;
+const ENEMY_BULLET_DAMAGE = 6;
+
 function enemyShoot() {
     const now = Date.now();
-    if (now - enemy.lastShot < 1200) return;
+    if (now - enemy.lastShot < ENEMY_COOLDOWN) return;
     enemy.lastShot = now;
 
     const px = player.x + player.w / 2;
@@ -223,14 +232,60 @@ function enemyShoot() {
     const ey = enemy.y + enemy.h / 2;
     const angle = Math.atan2(py - ey, px - ex);
 
+    enemy.face = Math.cos(angle) >= 0 ? 1 : -1;
+
     bullets.push({
         x: ex, y: ey,
-        vx: Math.cos(angle) * 6,
-        vy: Math.sin(angle) * 6,
-        life: 60,
+        vx: Math.cos(angle) * ENEMY_BULLET_SPEED,
+        vy: Math.sin(angle) * ENEMY_BULLET_SPEED,
+        life: ENEMY_BULLET_LIFE,
         owner: 'enemy',
-        damage: 8,
+        damage: ENEMY_BULLET_DAMAGE,
     });
+}
+
+// ===== ИИ ВРАГА =====
+function updateEnemyAI() {
+    const px = player.x + player.w / 2;
+    const py = player.y + player.h / 2;
+    const ex = enemy.x + enemy.w / 2;
+    const ey = enemy.y + enemy.h / 2;
+    const dist = Math.hypot(px - ex, py - ey);
+
+    const hpPercent = enemy.hp / enemy.maxHp;
+    let moveX = 0, moveY = 0;
+
+    if (hpPercent < 0.3) {
+        // мало HP — отходит
+        moveX = (ex - px) / (dist || 1);
+        moveY = (ey - py) / (dist || 1);
+    } else if (dist > 200) {
+        // далеко — идёт к игроку
+        moveX = (px - ex) / (dist || 1);
+        moveY = (py - ey) / (dist || 1);
+    } else if (dist < 120) {
+        // близко — отходит немного
+        moveX = (ex - px) / (dist || 1);
+        moveY = (ey - py) / (dist || 1);
+    } else {
+        // средняя дистанция — стрейф (боком)
+        const perpX = -(py - ey) / (dist || 1);
+        const perpY = (px - ex) / (dist || 1);
+        enemy.aiTimer -= 16;
+        if (enemy.aiTimer <= 0) {
+            enemy.aiTimer = 800 + Math.random() * 600;
+            enemy.aiDir = Math.random() < 0.5 ? 1 : -1;
+        }
+        moveX = perpX * (enemy.aiDir || 1);
+        moveY = perpY * (enemy.aiDir || 1);
+    }
+
+    enemy.x += moveX * enemy.speed;
+    enemy.y += moveY * enemy.speed;
+    enemy.x = Math.max(0, Math.min(W - enemy.w, enemy.x));
+    enemy.y = Math.max(0, Math.min(H - enemy.h, enemy.y));
+
+    enemyShoot();
 }
 
 // ===== ОБНОВЛЕНИЕ =====
@@ -241,24 +296,11 @@ function update() {
     player.x = Math.max(0, Math.min(W - player.w, player.x));
     player.y = Math.max(0, Math.min(H - player.h, player.y));
 
-    // движение врага (простое — идёт к игроку)
-    enemy.changeDirTimer -= 16;
-    if (enemy.changeDirTimer <= 0) {
-        enemy.changeDirTimer = 1000 + Math.random() * 1000;
-        enemy.targetX = player.x;
-        enemy.targetY = player.y;
+    if (Math.abs(joyVector.x) > 0.1) {
+        player.face = joyVector.x > 0 ? 1 : -1;
     }
-    const dx = (enemy.targetX - enemy.x);
-    const dy = (enemy.targetY - enemy.y);
-    const dist = Math.hypot(dx, dy) || 1;
-    if (dist > 100) {
-        enemy.x += dx / dist * enemy.speed;
-        enemy.y += dy / dist * enemy.speed;
-    }
-    enemy.x = Math.max(0, Math.min(W - enemy.w, enemy.x));
-    enemy.y = Math.max(0, Math.min(H - enemy.h, enemy.y));
 
-    enemyShoot();
+    updateEnemyAI();
 
     // пули
     for (let i = bullets.length - 1; i >= 0; i--) {
@@ -272,7 +314,6 @@ function update() {
             continue;
         }
 
-        // попадание
         if (b.owner === 'player') {
             if (b.x > enemy.x && b.x < enemy.x + enemy.w &&
                 b.y > enemy.y && b.y < enemy.y + enemy.h) {
@@ -289,55 +330,128 @@ function update() {
             }
         }
     }
+}
 
-    // HUD
-    document.getElementById('myHp').style.width = (player.hp / player.maxHp * 100) + '%';
-    document.getElementById('enemyHp').style.width = (enemy.hp / enemy.maxHp * 100) + '%';
-    document.getElementById('myHpText').textContent = Math.max(0, player.hp) + ' / ' + player.maxHp;
-    document.getElementById('enemyHpText').textContent = Math.max(0, enemy.hp) + ' / ' + enemy.maxHp;
+// ===== ОТРИСОВКА HP-БАРА =====
+function drawHealthBar(x, y, w, h, hp, maxHp, isEnemy) {
+    // тень под баром
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(x + 2, y + 2, w, h);
+
+    if (isEnemy) {
+        // враг — health_enemy.png (красный, не меняется)
+        if (TEX.health_enemy) {
+            ctx.drawImage(TEX.health_enemy, x, y, w, h);
+        } else {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = '#FF4757';
+            ctx.fillRect(x, y, w * (hp / maxHp), h);
+        }
+    } else {
+        // игрок — health.png (зелёный → красный)
+        const ratio = hp / maxHp;
+        const r = Math.round(255 * (1 - ratio));
+        const g = Math.round(180 * ratio);
+        const color = `rgb(${r},${g},0)`;
+
+        if (TEX.health) {
+            // фон баров
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w * ratio, h);
+            // рамка из текстуры поверх
+            ctx.globalAlpha = 0.9;
+            ctx.drawImage(TEX.health, x, y, w, h);
+            ctx.globalAlpha = 1;
+        } else {
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x, y, w, h);
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w * ratio, h);
+        }
+    }
+
+    // число HP по центру
+    const text = Math.max(0, Math.ceil(hp));
+    ctx.font = 'bold ' + Math.round(h * 0.7) + 'px "Lilita", Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(text, x + w / 2, y + h / 2 + 1);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, x + w / 2, y + h / 2 + 1);
 }
 
 // ===== ОТРИСОВКА =====
 function draw() {
     // фон
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, W, H);
-
-    // сетка
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 50) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, H);
-        ctx.stroke();
+    if (TEX.bg) {
+        ctx.drawImage(TEX.bg, 0, 0, W, H);
+    } else {
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, W, H);
     }
-    for (let y = 0; y < H; y += 50) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(W, y);
-        ctx.stroke();
+
+    // тень врага
+    if (TEX.shadow) {
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(TEX.shadow, enemy.x - 5, enemy.y + enemy.h - 10, enemy.w + 10, 15);
+        ctx.globalAlpha = 1;
+    }
+
+    // враг
+    if (TEX.shelly) {
+        ctx.save();
+        if (enemy.face < 0) {
+            ctx.translate(enemy.x + enemy.w, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(TEX.shelly, 0, enemy.y, enemy.w, enemy.h);
+        } else {
+            ctx.drawImage(TEX.shelly, enemy.x, enemy.y, enemy.w, enemy.h);
+        }
+        ctx.restore();
+    } else {
+        ctx.fillStyle = '#FF4757';
+        ctx.fillRect(enemy.x, enemy.y, enemy.w, enemy.h);
+    }
+
+    // тень игрока
+    if (TEX.shadow) {
+        ctx.globalAlpha = 0.5;
+        ctx.drawImage(TEX.shadow, player.x - 5, player.y + player.h - 10, player.w + 10, 15);
+        ctx.globalAlpha = 1;
     }
 
     // игрок
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(player.x + 10, player.y + 10, 8, 8);
-    ctx.fillRect(player.x + 22, player.y + 10, 8, 8);
+    if (TEX.shelly) {
+        ctx.save();
+        if (player.face < 0) {
+            ctx.translate(player.x + player.w, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(TEX.shelly, 0, player.y, player.w, player.h);
+        } else {
+            ctx.drawImage(TEX.shelly, player.x, player.y, player.w, player.h);
+        }
+        ctx.restore();
+    } else {
+        ctx.fillStyle = '#4DA6FF';
+        ctx.fillRect(player.x, player.y, player.w, player.h);
+    }
 
-    // враг
-    ctx.fillStyle = enemy.color;
-    ctx.fillRect(enemy.x, enemy.y, enemy.w, enemy.h);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(enemy.x + 10, enemy.y + 10, 8, 8);
-    ctx.fillRect(enemy.x + 22, enemy.y + 10, 8, 8);
+    // HP-бары над головами
+    const barW = 100;
+    const barH = 18;
+    drawHealthBar(enemy.x + enemy.w / 2 - barW / 2, enemy.y - 30, barW, barH, enemy.hp, enemy.maxHp, true);
+    drawHealthBar(player.x + player.w / 2 - barW / 2, player.y - 30, barW, barH, player.hp, player.maxHp, false);
 
     // пули
     for (const b of bullets) {
         ctx.fillStyle = b.owner === 'player' ? '#4DA6FF' : '#FF4757';
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
         ctx.fill();
     }
 }
@@ -351,7 +465,6 @@ function loop() {
     }
     requestAnimationFrame(loop);
 }
-loop();
 
 // ===== КОНЕЦ БОЯ =====
 function endBattle(win) {
@@ -360,7 +473,6 @@ function endBattle(win) {
 
     const trophies = win ? 8 : -5;
 
-    // показываем экран
     const result = document.getElementById('result');
     const title = document.getElementById('resultTitle');
     const text = document.getElementById('resultText');
@@ -369,7 +481,6 @@ function endBattle(win) {
     text.textContent = (win ? '+' : '') + trophies + ' 🏆';
     result.classList.add('on');
 
-    // МОСТ — через hash
     setTimeout(() => {
         window.location.hash = (win ? 'win_' : 'lose_') + trophies;
     }, 1500);
