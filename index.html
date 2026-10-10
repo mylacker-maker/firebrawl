@@ -35,6 +35,7 @@ const BRAWLERS = {
     bullet: 'shelly_bullet',       // textures/shelly_bullet.png
     sound: 'shelly',               // textures/shelly.mp3
     hp: 6500,
+    hpPerLvl: 65,                  // +HP за каждый уровень силы
     dmg: (lvl) => 890 + 40 * lvl,
     reload: 1.6,                   // секунды
     range: 520,                    // дальность волны
@@ -47,7 +48,6 @@ const BRAWLERS = {
 if (!BRAWLERS[BRAWLER_ID]) BRAWLER_ID = 1;
 const IDS = Object.keys(BRAWLERS).map(Number);
 
-const BOT_NICKS = ['Viper', 'Storm', 'Rex', 'Ace', 'Boss', 'Zed', 'Nova', 'Blaze', 'Wolf', 'Hunter'];
 
 /* ================= ЗАГРУЗКА ================= */
 const images = {};
@@ -121,7 +121,7 @@ function makeFighter(id, lvl, x, y, name, isEnemy) {
   return {
     id, def, lvl, name, isEnemy,
     x, y, vx: 0, vy: 0,
-    hp: def.hp, maxHp: def.hp,
+    hp: def.hp + def.hpPerLvl * lvl, maxHp: def.hp + def.hpPerLvl * lvl,
     cd: 0,
     flash: 0, dead: false, deathT: 0,
     ai: { t: rand(0.3, 1), strafe: Math.random() < 0.5 ? 1 : -1, pending: false, fireAt: 0 }
@@ -137,8 +137,11 @@ let frozen = false;
 let time = 0;
 
 function enemyLevel() {
-  if (LVL <= 1) return 1;
-  return clamp(LVL + Math.floor(rand(-1, 2)), 1, 11); // -1, 0 или +1
+  if (LVL <= 1) return 1;                         // 1 -> у врага тоже 1
+  const r = Math.random();
+  if (r < 0.10) return Math.min(11, LVL + 1);     // небольшой шанс: на 1 сила больше
+  if (r < 0.45) return LVL;                       // такая же сила как у нас
+  return 1 + Math.floor(Math.random() * LVL);     // любой уровень от 1 до нашего
 }
 
 /* ================= БОЙ ================= */
@@ -168,6 +171,38 @@ function playerAttack() {
   fire(player, Math.atan2(e.y - p.y, e.x - p.x));
 }
 
+function playResult(key, hash) {
+  let done = false;
+  const finish = () => { if (done) return; done = true; location.hash = hash; };
+  const a = sounds[key];
+  if (!a) { setTimeout(finish, 500); return; }
+  try {
+    a.loop = false;
+    a.currentTime = 0;
+    a.addEventListener('ended', finish);
+    a.addEventListener('error', finish);
+    const p = a.play();
+    if (p && p.catch) p.catch(() => setTimeout(finish, 500));
+  } catch (e) { setTimeout(finish, 500); }
+  setTimeout(finish, 30000); // страховка
+}
+
+let battleOn = false;
+function ensureBattle() {
+  const a = sounds['battle'];
+  if (!a || over || battleOn) return;
+  a.loop = true;
+  a.volume = 0.5;
+  const p = a.play();
+  if (p && p.then) p.then(() => { battleOn = true; }).catch(() => {});
+  else battleOn = true;
+}
+function stopBattle() {
+  const a = sounds['battle'];
+  battleOn = true; // больше не запускать
+  if (a) { try { a.pause(); } catch (e) {} }
+}
+
 function addEffect(x, y, type) {
   effects.push({ x, y, t: 0, dur: type === 'death' ? 0.5 : 0.25, type });
 }
@@ -184,11 +219,10 @@ function damage(target, amount, hx, hy) {
     over = true;
     const c = cen(target);
     addEffect(c.x, c.y, 'death');
-    const result = target === player ? '#lost' : '#win';
-    setTimeout(() => {
-      frozen = true;
-      location.hash = result;
-    }, 500);
+    stopBattle();
+    setTimeout(() => { frozen = true; }, 500);
+    if (target === player) playResult('lost', '#lost');
+    else playResult('win', '#win');
   }
 }
 
@@ -242,7 +276,7 @@ function aiUpdate(dt) {
   const mag = Math.hypot(mx, my);
   if (mag > 1) { mx /= mag; my /= mag; }
 
-  const speed = 245;
+  const speed = 267.05;
   const tvx = mx * speed, tvy = my * speed;
   const k = Math.min(1, dt * 6);
   e.vx += (tvx - e.vx) * k;
@@ -269,8 +303,6 @@ function aiUpdate(dt) {
 }
 
 /* ================= ОБНОВЛЕНИЕ ================= */
-const input = { mx: 0, my: 0, keys: {} };
-
 function update(dt) {
   time += dt;
 
@@ -292,7 +324,7 @@ function update(dt) {
   if (k['s'] || k['arrowdown'])  my += 1;
   const m = Math.hypot(mx, my);
   if (m > 1) { mx /= m; my /= m; }
-  const ps = 280;
+  const ps = 305.2;
   player.vx = mx * ps; player.vy = my * ps;
 
   if (player.cd > 0) player.cd = Math.max(0, player.cd - dt);
@@ -403,10 +435,8 @@ function drawBars(f) {
   if (img) barH = barW * img.height / img.width;
   const bx = f.x, by = f.y - h - 10 - barH / 2;
   if (img) ctx.drawImage(img, bx - barW / 2, by - barH / 2, barW, barH);
-  drawText(String(Math.ceil(f.hp)), bx, by + 1, 'Lilita', Math.round(barH * 0.62));
-  if (f.isEnemy) {
-    drawText(f.name, bx, by - barH / 2 - 14, 'Pusia', 22);
-  }
+  drawText(String(Math.ceil(f.hp)), bx, by + 1, 'Lilita', Math.round(barH * 0.42));
+  drawText(f.name, bx, by - barH / 2 - 14, 'Pusia', 22);
 }
 
 function drawBullet(b) {
@@ -501,31 +531,93 @@ function render() {
   for (const e of effects) drawEffect(e);
 
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawJoystick();
   drawAttackButton();
 }
 
+/* ================= ДЖОЙСТИК ================= */
+function joyR() { return Math.min(W, H) * 0.13; }
+function joyIdle() { const r = joyR(); return { x: r + W * 0.05, y: H - r - H * 0.08 }; }
+let joy = null; // {id, cx, cy, kx, ky}
+
+function drawJoystick() {
+  const R = joyR();
+  const c = joy ? { x: joy.cx, y: joy.cy } : joyIdle();
+  const k = joy ? { x: joy.kx, y: joy.ky } : c;
+  const active = !!joy;
+  ctx.save();
+
+  // основание
+  ctx.shadowColor = 'rgba(0,120,255,0.8)';
+  ctx.shadowBlur = active ? 28 : 16;
+  let g = ctx.createRadialGradient(c.x, c.y, R * 0.2, c.x, c.y, R);
+  g.addColorStop(0, 'rgba(40,120,255,0.18)');
+  g.addColorStop(1, 'rgba(20,70,220,' + (active ? 0.55 : 0.4) + ')');
+  ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+  ctx.fillStyle = g; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = R * 0.09; ctx.strokeStyle = '#06174f'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.965, 0, Math.PI * 2);
+  ctx.lineWidth = R * 0.04; ctx.strokeStyle = 'rgba(150,210,255,0.9)'; ctx.stroke();
+
+  // внутреннее кольцо
+  ctx.beginPath(); ctx.arc(c.x, c.y, R * 0.62, 0, Math.PI * 2);
+  ctx.lineWidth = R * 0.025; ctx.strokeStyle = 'rgba(150,210,255,0.35)'; ctx.stroke();
+
+  // стрелки
+  ctx.fillStyle = 'rgba(190,230,255,0.75)';
+  const a = R * 0.82, s2 = R * 0.07;
+  [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(([dx, dy]) => {
+    const px = c.x + dx * a, py = c.y + dy * a;
+    ctx.beginPath();
+    ctx.moveTo(px + dx * s2, py + dy * s2);
+    ctx.lineTo(px - dx * s2 + dy * s2 * 1.4, py - dy * s2 + dx * s2 * 1.4);
+    ctx.lineTo(px - dx * s2 - dy * s2 * 1.4, py - dy * s2 - dx * s2 * 1.4);
+    ctx.closePath(); ctx.fill();
+  });
+
+  // шарик
+  const kr = R * 0.42;
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 4;
+  g = ctx.createRadialGradient(k.x - kr * 0.3, k.y - kr * 0.4, kr * 0.1, k.x, k.y, kr);
+  g.addColorStop(0, '#9be0ff');
+  g.addColorStop(0.45, '#2f84ff');
+  g.addColorStop(1, '#0b3fb8');
+  ctx.beginPath(); ctx.arc(k.x, k.y, kr, 0, Math.PI * 2);
+  ctx.fillStyle = g; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.lineWidth = kr * 0.16; ctx.strokeStyle = '#06174f'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(k.x, k.y, kr * 0.84, Math.PI * 1.05, Math.PI * 1.75);
+  ctx.lineWidth = kr * 0.1; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.stroke();
+  ctx.restore();
+}
+
 /* ================= ВВОД ================= */
-let joy = null; // {id, sx, sy}
+const input = { mx: 0, my: 0, keys: {} };
+
 canvas.addEventListener('pointerdown', (e) => {
   if (frozen) return;
+  ensureBattle();
   const g = btnGeom();
-  const dx = e.clientX - g.cx, dy = e.clientY - g.cy;
-  if (Math.hypot(dx, dy) <= g.r * 1.15) {
+  if (Math.hypot(e.clientX - g.cx, e.clientY - g.cy) <= g.r * 1.15) {
     playerAttack();
     return;
   }
   if (e.clientX < W * 0.6 && !joy) {
-    joy = { id: e.pointerId, sx: e.clientX, sy: e.clientY };
+    joy = { id: e.pointerId, cx: e.clientX, cy: e.clientY, kx: e.clientX, ky: e.clientY };
     canvas.setPointerCapture(e.pointerId);
   }
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!joy || joy.id !== e.pointerId) return;
-  const dx = e.clientX - joy.sx, dy = e.clientY - joy.sy;
-  const r = 60, d = Math.hypot(dx, dy);
-  if (d < 8) { input.mx = 0; input.my = 0; return; }
-  const k = Math.min(1, d / r);
-  input.mx = dx / d * k; input.my = dy / d * k;
+  const R = joyR(), maxR = R * 0.75;
+  let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
+  const d = Math.hypot(dx, dy);
+  if (d > maxR) { dx = dx / d * maxR; dy = dy / d * maxR; }
+  joy.kx = joy.cx + dx; joy.ky = joy.cy + dy;
+  const m = Math.hypot(dx, dy);
+  if (m < R * 0.08) { input.mx = 0; input.my = 0; return; }
+  input.mx = dx / maxR; input.my = dy / maxR;
 });
 function endJoy(e) {
   if (joy && joy.id === e.pointerId) { joy = null; input.mx = 0; input.my = 0; }
@@ -533,6 +625,7 @@ function endJoy(e) {
 canvas.addEventListener('pointerup', endJoy);
 canvas.addEventListener('pointercancel', endJoy);
 window.addEventListener('keydown', (e) => {
+  ensureBattle();
   const k = e.key.toLowerCase();
   input.keys[k] = true;
   if (k === ' ' && !frozen) { e.preventDefault(); playerAttack(); }
@@ -554,13 +647,14 @@ async function start() {
   const enemyId = IDS[Math.floor(Math.random() * IDS.length)];
   player = makeFighter(BRAWLER_ID, LVL, 260, 470, PLAYER_NAME, false);
   enemy  = makeFighter(enemyId, enemyLevel(), WORLD_W - 260, 470,
-            BOT_NICKS[Math.floor(Math.random() * BOT_NICKS.length)], true);
+            'Бот', true);
 
   const keys = ['bg', 'shadow', 'health', 'health_enemy', 'attack'];
   for (const id of IDS) {
     keys.push(BRAWLERS[id].tex, BRAWLERS[id].bullet);
     loadSound(BRAWLERS[id].sound);
   }
+  loadSound('battle'); loadSound('win'); loadSound('lost');
   const fonts = [
     document.fonts ? document.fonts.load('20px Lilita') : null,
     document.fonts ? document.fonts.load('20px Pusia') : null
@@ -574,6 +668,7 @@ async function start() {
   }
   if (images['attack']) tints['attack_dark'] = makeTint(images['attack'], 'rgba(0,0,0,0.6)');
 
+  ensureBattle();
   requestAnimationFrame((ts) => { last = ts; loop(ts); });
 }
 start();
