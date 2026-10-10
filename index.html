@@ -38,7 +38,7 @@ const BRAWLERS = {
     hpPerLvl: 65,                  // +HP за каждый уровень силы
     dmg: (lvl) => 890 + 40 * lvl,
     reload: 1.6,                   // секунды
-    range: 452.4,                  // дальность волны (520 - 13%)
+    range: 407.2,                  // дальность волны (452.4 - 10%)
     bulletSpeed: 950,
     bulletW: 152,                  // ширина спрайта волны (160 - 5%)
     bulletRadius: 58.9,            // радиус попадания волны
@@ -46,21 +46,6 @@ const BRAWLERS = {
     height: 150                    // высота бойца на экране
   },
   2: {
-    tex: 'colt',
-    bullet: 'colt_bullet',
-    sound: 'colt',                 // один раз за одно нажатие атаки
-    hp: 5200,
-    hpPerLvl: 75,
-    dmg: (lvl) => 140 + 10 * lvl,  // урон одного патрона
-    reload: 1.1,
-    range: 520,                    // как была у Shelly раньше
-    bulletSpeed: 1150,
-    bulletW: 64,                   // маленький, но не слишком
-    bulletRadius: 22,
-    shots: 4, burstInterval: 0.075, spread: 0.025,   // очередь из 4 патронов
-    height: 150
-  },
-  3: {
     tex: 'nita',
     bullet: 'bots_bullet',
     sound: 'nita',
@@ -73,6 +58,21 @@ const BRAWLERS = {
     bulletW: 152,                  // как у Shelly
     bulletRadius: 58.9,
     shots: 1, burstInterval: 0, spread: 0,
+    height: 150
+  },
+  3: {
+    tex: 'colt',
+    bullet: 'colt_bullet',
+    sound: 'colt',                 // один раз за одно нажатие атаки
+    hp: 5200,
+    hpPerLvl: 75,
+    dmg: (lvl) => 140 + 10 * lvl,  // урон одного патрона
+    reload: 1.1,
+    range: 520,                    // как была у Shelly раньше
+    bulletSpeed: 1150,
+    bulletW: 64,                   // маленький, но не слишком
+    bulletRadius: 22,
+    shots: 4, burstInterval: 0.075, spread: 0.025,   // очередь из 4 патронов
     height: 150
   }
 };
