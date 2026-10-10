@@ -38,11 +38,42 @@ const BRAWLERS = {
     hpPerLvl: 65,                  // +HP за каждый уровень силы
     dmg: (lvl) => 890 + 40 * lvl,
     reload: 1.6,                   // секунды
-    range: 520,                    // дальность волны
+    range: 452.4,                  // дальность волны (520 - 13%)
     bulletSpeed: 950,
-    bulletW: 160,                  // ширина спрайта волны
-    bulletRadius: 62,              // радиус попадания волны
+    bulletW: 152,                  // ширина спрайта волны (160 - 5%)
+    bulletRadius: 58.9,            // радиус попадания волны
+    shots: 1, burstInterval: 0, spread: 0,
     height: 150                    // высота бойца на экране
+  },
+  2: {
+    tex: 'colt',
+    bullet: 'colt_bullet',
+    sound: 'colt',                 // один раз за одно нажатие атаки
+    hp: 5200,
+    hpPerLvl: 75,
+    dmg: (lvl) => 140 + 10 * lvl,  // урон одного патрона
+    reload: 1.1,
+    range: 520,                    // как была у Shelly раньше
+    bulletSpeed: 1150,
+    bulletW: 64,                   // маленький, но не слишком
+    bulletRadius: 22,
+    shots: 4, burstInterval: 0.075, spread: 0.025,   // очередь из 4 патронов
+    height: 150
+  },
+  3: {
+    tex: 'nita',
+    bullet: 'bots_bullet',
+    sound: 'nita',
+    hp: 4750,
+    hpPerLvl: 50,
+    dmg: (lvl) => 900 + 65 * lvl,
+    reload: 1.8,
+    range: 384.5,                  // дальность Shelly сейчас - 15%
+    bulletSpeed: 807.5,            // на 15% медленнее Shelly
+    bulletW: 152,                  // как у Shelly
+    bulletRadius: 58.9,
+    shots: 1, burstInterval: 0, spread: 0,
+    height: 150
   }
 };
 if (!BRAWLERS[BRAWLER_ID]) BRAWLER_ID = 1;
@@ -111,7 +142,15 @@ resize();
 /* ================= СОСТОЯНИЕ ================= */
 const BODY_R = 38;
 const BODY_OFF = 60; // центр тела выше ног
-const ARENA = { x1: 100, x2: WORLD_W - 100, y1: 250, y2: WORLD_H - 40 };
+// Барьеры только по краям экрана
+function getBounds(f) {
+  const img = images[f.def.tex];
+  const h = f.def.height;
+  const w = img ? h * img.width / img.height : h * 0.7;
+  const minX = -OX / S, maxX = (W - OX) / S;
+  const minY = -OY / S, maxY = (H - OY) / S;
+  return { x1: minX + w / 2 + 4, x2: maxX - w / 2 - 4, y1: minY + h + 80, y2: maxY - 14 };
+}
 
 function rand(a, b) { return a + Math.random() * (b - a); }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -145,7 +184,7 @@ function enemyLevel() {
 }
 
 /* ================= БОЙ ================= */
-function fire(shooter, angle) {
+function spawnBullet(shooter, angle, react) {
   const d = shooter.def;
   const c = cen(shooter);
   bullets.push({
@@ -159,10 +198,28 @@ function fire(shooter, angle) {
     dmg: d.dmg(shooter.lvl),
     def: d,
     radius: d.bulletRadius,
-    react: Math.random() < 0.72
+    react
   });
+}
+
+function fire(shooter, angle) {
+  const d = shooter.def;
   shooter.cd = d.reload;
-  playSound(d.sound);
+  shooter.burst = { angle, left: d.shots, t: 0, react: Math.random() < 0.72 };
+  playSound(d.sound); // один раз за атаку
+}
+
+function processBurst(f, dt) {
+  const b = f.burst;
+  if (!b || over) return;
+  b.t -= dt;
+  while (b.left > 0 && b.t <= 0) {
+    const sp = f.def.spread ? rand(-f.def.spread, f.def.spread) : 0;
+    spawnBullet(f, b.angle + sp, b.react);
+    b.left--;
+    b.t += f.def.burstInterval;
+  }
+  if (b.left <= 0) f.burst = null;
 }
 
 function playerAttack() {
@@ -335,11 +392,15 @@ function update(dt) {
   for (const f of [player, enemy]) {
     f.x += f.vx * dt;
     f.y += f.vy * dt;
-    if (f.x < ARENA.x1) { f.x = ARENA.x1; if (f.vx < 0) f.vx = 0; }
-    if (f.x > ARENA.x2) { f.x = ARENA.x2; if (f.vx > 0) f.vx = 0; }
-    if (f.y < ARENA.y1) { f.y = ARENA.y1; if (f.vy < 0) f.vy = 0; }
-    if (f.y > ARENA.y2) { f.y = ARENA.y2; if (f.vy > 0) f.vy = 0; }
+    const B = getBounds(f);
+    if (f.x < B.x1) { f.x = B.x1; if (f.vx < 0) f.vx = 0; }
+    if (f.x > B.x2) { f.x = B.x2; if (f.vx > 0) f.vx = 0; }
+    if (f.y < B.y1) { f.y = B.y1; if (f.vy < 0) f.vy = 0; }
+    if (f.y > B.y2) { f.y = B.y2; if (f.vy > 0) f.vy = 0; }
   }
+
+  // очереди выстрелов
+  for (const f of [player, enemy]) processBurst(f, dt);
 
   // пули
   for (const b of bullets) {
